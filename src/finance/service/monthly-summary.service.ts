@@ -35,22 +35,29 @@ class MonthlySummaryService {
       throw new Error('Não foi possível calcular o histórico mensal.');
     }
 
-    const [receitas, despesas, user] = await Promise.all([
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const [receitas, despesas, user, quantidadeTotalReceitas] = await Promise.all([
       Receita.find({
-        userId: new mongoose.Types.ObjectId(userId),
+        userId: userObjectId,
         dataRecebimento: { $gte: firstMonth.start, $lt: currentMonth.end }
       }).lean(),
       Despesa.find({
-        userId: new mongoose.Types.ObjectId(userId),
+        userId: userObjectId,
         data: { $gte: firstMonth.start, $lt: currentMonth.end }
       }).lean(),
-      User.findById(userId).select('salarioMensal').lean()
+      User.findById(userId).select('salarioMensal').lean(),
+      Receita.countDocuments({ userId: userObjectId })
     ]);
 
     let salarioMensal = user?.salarioMensal ?? 0;
+    if (quantidadeTotalReceitas === 0 && salarioMensal > 0) {
+      salarioMensal = 0;
+      await User.findByIdAndUpdate(userId, { salarioMensal: null });
+    }
+
     if (user?.salarioMensal === undefined || user.salarioMensal === null) {
       const ultimoSalario = await Receita.findOne({
-        userId: new mongoose.Types.ObjectId(userId),
+        userId: userObjectId,
         categoria: 'salario'
       }).sort({ dataRecebimento: -1, createdAt: -1 }).lean();
       salarioMensal = ultimoSalario?.valor || 0;

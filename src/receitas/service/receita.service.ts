@@ -66,7 +66,19 @@ class ReceitaService {
   if(!receita){
      throw new Error('Receita não encontrada')
   }
-   return receita
+
+  if (receita.categoria === 'salario') {
+    const ultimoSalario = await Receita.findOne({
+      userId,
+      categoria: 'salario'
+    }).sort({ dataRecebimento: -1, createdAt: -1 }).lean();
+
+    await User.findByIdAndUpdate(userId, {
+      salarioMensal: ultimoSalario?.valor ?? null
+    });
+  }
+
+  return receita
  }
 
 }
