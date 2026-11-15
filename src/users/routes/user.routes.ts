@@ -4,6 +4,7 @@ import userController from '../controllers/user.controller';
 import authMiddleware from '../../middlewares/auth.middleware';
 
 import {
+  registerLimiter,
   loginLimiter,
   forgotPasswordLimiter,
   resetPasswordLimiter
@@ -11,7 +12,7 @@ import {
 
 const router = Router();
 
-router.post('/', userController.create);
+router.post('/', registerLimiter, userController.create);
 
 router.post('/login', loginLimiter, userController.login);
 

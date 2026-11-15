@@ -48,7 +48,37 @@ class UserService {
     userData: CreateUserData
   ): Promise<HydratedDocument<IUser>> {
 
-    const normalizedEmail = userData.email.trim().toLowerCase();
+    if (!userData || typeof userData !== 'object') {
+      throw new ServiceError('Informe nome, e-mail e senha.', 400);
+    }
+
+    const name = typeof userData.name === 'string' ? userData.name.trim() : '';
+    const email = typeof userData.email === 'string'
+      ? userData.email.trim().toLowerCase()
+      : '';
+    const password = typeof userData.password === 'string' ? userData.password : '';
+
+    if (!name || name.length > 100) {
+      throw new ServiceError('Informe um nome com até 100 caracteres.', 400);
+    }
+
+    if (
+      !email ||
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      throw new ServiceError('Informe um e-mail válido.', 400);
+    }
+
+    if (!password || password.length < 6) {
+      throw new ServiceError('A senha deve ter pelo menos 6 caracteres.', 400);
+    }
+
+    if (Buffer.byteLength(password, 'utf8') > 72) {
+      throw new ServiceError('A senha não pode exceder 72 bytes.', 400);
+    }
+
+    const normalizedEmail = email;
 
     const existingUser = await User.findOne({
       email: normalizedEmail
@@ -66,21 +96,45 @@ class UserService {
       10
     );
 
-    const user = await User.create({
-      ...userData,
-      email: normalizedEmail,
-      password: hashedPassword
-    });
+    try {
+      return await User.create({
+        name,
+        email: normalizedEmail,
+        password: hashedPassword
+      });
+    } catch (error: unknown) {
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? error.code
+        : undefined;
 
-    return user;
+      if (code === 11000) {
+        throw new ServiceError('Este e-mail já está cadastrado.', 409);
+      }
+
+      throw error;
+    }
+
   }
 
   async login(
     credentials: LoginCredentials
   ): Promise<LoginResult> {
 
+    if (
+      !credentials ||
+      typeof credentials.email !== 'string' ||
+      typeof credentials.password !== 'string'
+    ) {
+      throw new ServiceError('Informe e-mail e senha.', 400);
+    }
+
+    const email = credentials.email.trim().toLowerCase();
+    if (!email || email.length > 254 || !credentials.password) {
+      throw new ServiceError('Informe e-mail e senha válidos.', 400);
+    }
+
     const user = await User.findOne({
-      email: credentials.email.trim().toLowerCase()
+      email
     });
 
     if (!user) {

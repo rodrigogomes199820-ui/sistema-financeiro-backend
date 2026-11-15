@@ -10,6 +10,10 @@ import errorMiddleware from './middlewares/error.middleware';
 
 const app = express();
 
+if (process.env.RENDER === 'true') {
+  app.set('trust proxy', 1);
+}
+
 app.use(cors());
 app.use(express.json());
 

@@ -16,9 +16,12 @@ const errorMiddleware: ErrorRequestHandler = (
   console.error(err);
 
   const statusCode = err.status || 500;
+  const message = statusCode >= 500
+    ? 'Erro interno do servidor.'
+    : err.message || 'Erro na solicitação.';
 
   res.status(statusCode).json({
-    message: err.message || 'Erro interno do servidor.'
+    message
   });
 };
 
