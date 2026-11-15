@@ -17,9 +17,25 @@ class DespesaService {
   }
 
   async update(despesaId: string, userId: string, data: Partial<DespesaInput>) {
+    const camposPermitidos = new Set(['nome', 'valor', 'data']);
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      Array.isArray(data) ||
+      Object.keys(data).length === 0 ||
+      Object.keys(data).some((campo) => !camposPermitidos.has(campo))
+    ) {
+      throw new Error('Campos de atualização inválidos.');
+    }
+
+    const dadosPermitidos: Partial<DespesaInput> = {};
+    if (data.nome !== undefined) dadosPermitidos.nome = data.nome;
+    if (data.valor !== undefined) dadosPermitidos.valor = data.valor;
+    if (data.data !== undefined) dadosPermitidos.data = data.data;
+
     const despesa = await Despesa.findOneAndUpdate(
       { _id: despesaId, userId },
-      data,
+      dadosPermitidos,
       { new: true, runValidators: true }
     );
 
