@@ -1,18 +1,25 @@
 import { Request, Response } from 'express';
-import despesaService, { DespesaInput } from '../service/despesa.service';
+import despesaService, { CreateDespesaInput, DespesaInput } from '../service/despesa.service';
 
 class DespesaController {
-  async create(req: Request<{}, {}, DespesaInput>, res: Response) {
+  async create(req: Request<{}, {}, CreateDespesaInput>, res: Response) {
     if (!req.user) {
       return res.status(401).json({ message: 'Usuário não autenticado.' });
     }
 
     try {
-      const despesa = await despesaService.create(req.body, req.user.id);
+      const resultado = await despesaService.create(req.body, req.user.id);
+
+      if (Array.isArray(resultado)) {
+        return res.status(201).json({
+          message: `${resultado.length} parcelas cadastradas com sucesso!`,
+          despesas: resultado
+        });
+      }
 
       return res.status(201).json({
         message: 'Despesa cadastrada com sucesso!',
-        despesa
+        despesa: resultado
       });
     } catch (error) {
       console.error('Erro ao cadastrar despesa:', error);

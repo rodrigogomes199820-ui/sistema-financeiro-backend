@@ -21,21 +21,35 @@ class MonthlySummaryService {
     }).formatToParts(now);
     const year = Number(saoPauloParts.find((part) => part.type === 'year')?.value);
     const month = Number(saoPauloParts.find((part) => part.type === 'month')?.value);
-    const months = Array.from({ length: 6 }, (_, index) =>
-      this.createMonthRange(year, month - 5 + index)
+    const currentMonth = this.createMonthRange(year, month);
+    const firstMonth = this.createMonthRange(year, month - 5);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const ultimaParcela = await Despesa.findOne({
+      userId: userObjectId,
+      compraParceladaId: { $exists: true, $ne: '' }
+    }).sort({ data: -1 }).select('data').lean();
+    const chaveUltimaParcela = ultimaParcela ? this.monthKey(ultimaParcela.data) : currentMonth.key;
+    const mesUltimaParcela = this.createMonthRange(
+      Number(chaveUltimaParcela.slice(0, 4)),
+      Number(chaveUltimaParcela.slice(5, 7))
     );
-    const currentMonth = months[months.length - 1];
+    const lastMonth = mesUltimaParcela.key > currentMonth.key ? mesUltimaParcela : currentMonth;
+    const totalMeses = (lastMonth.year - firstMonth.year) * 12 + lastMonth.month - firstMonth.month + 1;
+    const months = Array.from({ length: totalMeses }, (_, index) =>
+      this.createMonthRange(firstMonth.year, firstMonth.month + index)
+    );
 
     if (!currentMonth) {
       throw new Error('Não foi possível calcular o período mensal.');
     }
 
-    const firstMonth = months[0];
     if (!firstMonth) {
       throw new Error('Não foi possível calcular o histórico mensal.');
     }
+    if (!lastMonth) {
+      throw new Error('Não foi possível calcular o período futuro.');
+    }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
     const [receitas, despesas, user, quantidadeTotalReceitas] = await Promise.all([
       Receita.find({
         userId: userObjectId,
@@ -43,7 +57,7 @@ class MonthlySummaryService {
       }).lean(),
       Despesa.find({
         userId: userObjectId,
-        data: { $gte: firstMonth.start, $lt: currentMonth.end }
+        data: { $gte: firstMonth.start, $lt: lastMonth.end }
       }).lean(),
       User.findById(userId).select('salarioMensal').lean(),
       Receita.countDocuments({ userId: userObjectId })
@@ -116,7 +130,8 @@ class MonthlySummaryService {
           timeZone: 'UTC'
         }).format(new Date(Date.UTC(item.year, item.month - 1, 1))).replace('.', ''),
         receitas: receitasPorMes.get(item.key) || 0,
-        despesas: despesasPorMes.get(item.key) || 0
+        despesas: despesasPorMes.get(item.key) || 0,
+        projetado: item.key > currentMonth.key
       }))
     };
   }

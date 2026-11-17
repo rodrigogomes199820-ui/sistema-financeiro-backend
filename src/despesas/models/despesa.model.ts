@@ -5,6 +5,9 @@ export interface IDespesa {
   nome: string;
   valor: number;
   data: Date;
+  compraParceladaId?: string;
+  parcelaAtual?: number;
+  totalParcelas?: number;
 }
 
 const despesaSchema = new Schema<IDespesa>(
@@ -27,6 +30,19 @@ const despesaSchema = new Schema<IDespesa>(
     data: {
       type: Date,
       required: true
+    },
+    compraParceladaId: {
+      type: String,
+      index: true
+    },
+    parcelaAtual: {
+      type: Number,
+      min: 1
+    },
+    totalParcelas: {
+      type: Number,
+      min: 1,
+      max: 80
     }
   },
   {
