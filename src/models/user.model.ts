@@ -2,6 +2,7 @@
 import mongoose, { Schema } from 'mongoose';
 
 export interface IUser {
+  createdAt?: Date;
   name: string;
   email: string;
   password: string;

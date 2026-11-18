@@ -22,12 +22,20 @@ class MonthlySummaryService {
     const year = Number(saoPauloParts.find((part) => part.type === 'year')?.value);
     const month = Number(saoPauloParts.find((part) => part.type === 'month')?.value);
     const currentMonth = this.createMonthRange(year, month);
-    const firstMonth = this.createMonthRange(year, month - 5);
     const userObjectId = new mongoose.Types.ObjectId(userId);
-    const ultimaParcela = await Despesa.findOne({
-      userId: userObjectId,
-      compraParceladaId: { $exists: true, $ne: '' }
-    }).sort({ data: -1 }).select('data').lean();
+    const [user, ultimaParcela] = await Promise.all([
+      User.findById(userId).select('createdAt salarioMensal').lean(),
+      Despesa.findOne({
+        userId: userObjectId,
+        compraParceladaId: { $exists: true, $ne: '' }
+      }).sort({ data: -1 }).select('data').lean()
+    ]);
+    const dataCadastro = user?.createdAt || now;
+    const chaveCadastro = this.monthKey(dataCadastro);
+    const firstMonth = this.createMonthRange(
+      Number(chaveCadastro.slice(0, 4)),
+      Number(chaveCadastro.slice(5, 7))
+    );
     const chaveUltimaParcela = ultimaParcela ? this.monthKey(ultimaParcela.data) : currentMonth.key;
     const mesUltimaParcela = this.createMonthRange(
       Number(chaveUltimaParcela.slice(0, 4)),
@@ -50,7 +58,7 @@ class MonthlySummaryService {
       throw new Error('Não foi possível calcular o período futuro.');
     }
 
-    const [receitas, despesas, user, quantidadeTotalReceitas] = await Promise.all([
+    const [receitas, despesas, quantidadeTotalReceitas] = await Promise.all([
       Receita.find({
         userId: userObjectId,
         dataRecebimento: { $gte: firstMonth.start, $lt: currentMonth.end }
@@ -59,7 +67,6 @@ class MonthlySummaryService {
         userId: userObjectId,
         data: { $gte: firstMonth.start, $lt: lastMonth.end }
       }).lean(),
-      User.findById(userId).select('salarioMensal').lean(),
       Receita.countDocuments({ userId: userObjectId })
     ]);
 
@@ -83,13 +90,14 @@ class MonthlySummaryService {
 
     const receitasPorMes = new Map(months.map((item) => [item.key, 0]));
     const despesasPorMes = new Map(months.map((item) => [item.key, 0]));
+    const salariosPorMes = new Map(months.map((item) => [item.key, 0]));
+    const receitasExtrasPorMes = new Map(months.map((item) => [item.key, 0]));
     let receitasSemSalarioNoMes = 0;
     let salariosLancadosNoMes = 0;
 
     receitas.forEach((receita) => {
       const chave = this.monthKey(receita.dataRecebimento);
-      if (!receitasPorMes.has(chave)) return;
-      receitasPorMes.set(chave, (receitasPorMes.get(chave) || 0) + receita.valor);
+      if (!salariosPorMes.has(chave)) return;
 
       if (chave === currentMonth.key) {
         if (receita.categoria === 'salario') {
@@ -98,12 +106,35 @@ class MonthlySummaryService {
           receitasSemSalarioNoMes += receita.valor;
         }
       }
+
+      if (receita.categoria === 'salario') {
+        salariosPorMes.set(chave, (salariosPorMes.get(chave) || 0) + receita.valor);
+      } else {
+        receitasExtrasPorMes.set(chave, (receitasExtrasPorMes.get(chave) || 0) + receita.valor);
+      }
     });
 
     despesas.forEach((despesa) => {
       const chave = this.monthKey(despesa.data);
       if (!despesasPorMes.has(chave)) return;
       despesasPorMes.set(chave, (despesasPorMes.get(chave) || 0) + despesa.valor);
+    });
+
+    let ultimoSalarioConhecido = 0;
+    months.forEach((item) => {
+      const salarioLancado = salariosPorMes.get(item.key) || 0;
+      if (salarioLancado > 0) {
+        ultimoSalarioConhecido = salarioLancado;
+      }
+
+      const salarioDoMes = salarioLancado || ultimoSalarioConhecido ||
+        (item.key >= currentMonth.key ? salarioMensal : 0);
+      const receitaDoMes = (receitasExtrasPorMes.get(item.key) || 0) + salarioDoMes;
+      receitasPorMes.set(item.key, receitaDoMes);
+
+      if (item.key === currentMonth.key && salarioMensal > 0 && salarioLancado === 0) {
+        ultimoSalarioConhecido = salarioMensal;
+      }
     });
 
     const salarioConsideradoAutomaticamente = salariosLancadosNoMes === 0 && salarioMensal > 0;
@@ -131,7 +162,9 @@ class MonthlySummaryService {
         }).format(new Date(Date.UTC(item.year, item.month - 1, 1))).replace('.', ''),
         receitas: receitasPorMes.get(item.key) || 0,
         despesas: despesasPorMes.get(item.key) || 0,
-        projetado: item.key > currentMonth.key
+        saldo: (receitasPorMes.get(item.key) || 0) - (despesasPorMes.get(item.key) || 0),
+        projetado: item.key > currentMonth.key,
+        fechado: item.key < currentMonth.key
       }))
     };
   }

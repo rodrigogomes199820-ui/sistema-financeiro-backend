@@ -89,7 +89,9 @@ async editReceita(req: Request, res: Response) {
     );
 
     return res.status(200).json({
-      message: 'Receita atualizada com sucesso',
+      message: receita._id.toString() !== idLimpo
+        ? 'Salário atualizado a partir do mês atual; o histórico dos meses fechados foi preservado.'
+        : 'Receita atualizada com sucesso',
       receita
     });
 
